@@ -1,9 +1,16 @@
 language: rust
 rust: nightly
 cache: cargo
+install: cargo build --verbose
+script: cargo build --verbose; cargo test --verbose
 
 # heroku deploy
+before_deploy:
+  - rm -rf target/debug
+  - cargo build --verbose --release
+
 deploy:
+  skip_cleanup: true
   - provider: heroku
     api_key:
       secure: $HEROKU_API_KEY
