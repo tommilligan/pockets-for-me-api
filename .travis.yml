@@ -10,8 +10,8 @@ before_deploy:
   - cargo build --verbose --release
 
 deploy:
-  skip_cleanup: true
   - provider: heroku
+    skip_cleanup: true
     api_key:
       secure: $HEROKU_API_KEY
     app:
