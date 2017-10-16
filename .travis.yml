@@ -5,7 +5,6 @@ cache: cargo
 # heroku deploy
 deploy:
   - provider: heroku
-    skip_cleanup: true
     api_key:
       secure: $HEROKU_API_KEY
     app:
