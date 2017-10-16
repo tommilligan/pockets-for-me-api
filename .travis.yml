@@ -1,8 +1,13 @@
+# the basics
 language: rust
 rust: nightly
 cache: cargo
 install: cargo build --verbose
 script: cargo build --verbose; cargo test --verbose
+
+# notifications
+notifications:
+  email: false
 
 # heroku deploy
 before_deploy:
@@ -17,8 +22,6 @@ deploy:
     app:
       develop: pockets-for-me-api-staging
       master: pockets-for-me-api
-notifications:
-email: false
 
 # for codecov
 sudo: false
@@ -46,6 +49,6 @@ after_success: |
   make install DESTDIR=../../kcov-build &&
   cd ../.. &&
   rm -rf kcov-master &&
-  for file in target/debug/pockets-for-me-api-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+  for file in target/debug/pockets_for_me_api-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
