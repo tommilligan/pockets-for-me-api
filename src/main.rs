@@ -14,6 +14,7 @@ use rocket::State;
 use std::sync::Mutex;
 
 use rocket::response::status;
+use rocket::http::Status;
 
 // Elastic imports
 
@@ -42,13 +43,13 @@ enum ItemCategories {
 }
 impl KeywordFieldType<DefaultKeywordMapping> for ItemCategories {}
 impl FromStr for ItemCategories {
-    type Err = ();
+    type Err = String;
 
-    fn from_str(s: &str) -> Result<ItemCategories, ()> {
+    fn from_str(s: &str) -> Result<ItemCategories, String> {
         match s {
             "phone" => Ok(ItemCategories::Phone),
             "tablet" => Ok(ItemCategories::Tablet),
-            _ => Err(()),
+            _ => Err(format!("Invalid item category; {}", s)),
         }
     }
 }
@@ -91,19 +92,21 @@ struct ItemClient {
     dimensions: [i32; 3]
 }
 
-fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, ()> {
+fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String> {
     let item = item_client;
 
     // Store dimensions in descending order
     let mut sorted_dimensions = item.dimensions.clone();
     sorted_dimensions.sort();
 
+    let category_enum = item.category.parse::<ItemCategories>()?;
+
     let item_elastic = ItemElastic {
         computed: ItemElasticComputed {
             unique_name: format!("{} {} ({})", item.model, item.version, item.make)
         },
         data: ItemElasticData {
-            category: item.category.parse::<ItemCategories>().expect("Bad category"),
+            category: category_enum,
             make: item.make,
             model: item.model,
             version: item.version,
@@ -119,16 +122,20 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, ()> {
 }
 
 #[post("/", format = "application/json", data = "<item_client>")]
-fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> Json<Value> {
-    let item_elastic = item_client_to_elastic(item_client.into_inner());
+fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> Result<Json<Value>, status::Custom<String>> {
+
+    let item_elastic = match item_client_to_elastic(item_client.into_inner()) {
+        Ok(i)  => i,
+        Err(err) => return Err(status::Custom(Status::BadRequest, err)),
+    };
     let client = shared_client.lock().expect("Could not get elastic client lock");
 
     println!("{:?}", item_elastic);
 
-    Json(json!({
+    Ok(Json(json!({
         "status": "success",
         "reason": "We always win when creating!"
-    }))
+    })))
 }
 
 #[get("/<id>")]
