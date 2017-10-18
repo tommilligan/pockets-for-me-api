@@ -13,6 +13,7 @@ use rocket_contrib::{Json, Value};
 use rocket::State;
 use std::sync::Mutex;
 
+use rocket::response::status;
 
 // Elastic imports
 
@@ -34,7 +35,7 @@ type SharedClient = Mutex<SyncClient>;
 
 type ElasticId = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum ItemCategories {
     Phone,
     Tablet
@@ -52,40 +53,77 @@ impl FromStr for ItemCategories {
     }
 }
 
-#[derive(Serialize, Deserialize, ElasticType)]
+#[derive(Debug, Serialize, Deserialize, ElasticType)]
 struct ItemDimensions {
     x: i32,
     y: i32,
     z: i32
 }
 
-#[derive(Serialize, Deserialize, ElasticType)]
-struct ItemElastic {
+#[derive(Debug, Serialize, Deserialize, ElasticType)]
+struct ItemElasticComputed {
+    unique_name: String
+}
+
+#[derive(Debug, Serialize, Deserialize, ElasticType)]
+struct ItemElasticData {
     category: ItemCategories,
     make: String,
     model: String,
     version: String,
-    name: String,
     description: String,
     dimensions: ItemDimensions
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ElasticType)]
+struct ItemElastic {
+    computed: ItemElasticComputed,
+    data: ItemElasticData
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct ItemClient {
     category: String,
     make: String,
     model: String,
     version: String,
-    name: String,
     description: String,
     dimensions: [i32; 3]
 }
 
-#[post("/", format = "application/json", data = "<item>")]
-fn item_create(item: Json<ItemClient>, shared_client: State<SharedClient>) -> Json<Value> {
+fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, ()> {
+    let item = item_client;
 
+    // Store dimensions in descending order
+    let mut sorted_dimensions = item.dimensions.clone();
+    sorted_dimensions.sort();
+
+    let item_elastic = ItemElastic {
+        computed: ItemElasticComputed {
+            unique_name: format!("{} {} ({})", item.model, item.version, item.make)
+        },
+        data: ItemElasticData {
+            category: item.category.parse::<ItemCategories>().expect("Bad category"),
+            make: item.make,
+            model: item.model,
+            version: item.version,
+            description: item.description,
+            dimensions: ItemDimensions {
+                x: sorted_dimensions[2],
+                y: sorted_dimensions[1],
+                z: sorted_dimensions[0]
+            }
+        }
+    };
+    Ok(item_elastic)
+}
+
+#[post("/", format = "application/json", data = "<item_client>")]
+fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> Json<Value> {
+    let item_elastic = item_client_to_elastic(item_client.into_inner());
     let client = shared_client.lock().expect("Could not get elastic client lock");
 
+    println!("{:?}", item_elastic);
 
     Json(json!({
         "status": "success",
