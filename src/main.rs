@@ -29,7 +29,7 @@ use std::str::FromStr;
 
 // Other imports
 extern crate uuid;
-use uuid::{Uuid, Simple};
+use uuid::Uuid;
 
 
 // We need to define our DB connection for state storage
@@ -51,15 +51,19 @@ impl FromStr for ItemCategories {
 
     fn from_str(s: &str) -> Result<ItemCategories, String> {
         match s {
-            "phone" => Ok(ItemCategories::Phone),
-            "tablet" => Ok(ItemCategories::Tablet),
-            _ => Err(format!("Invalid item category; {}", s)),
+            "Phone" => Ok(ItemCategories::Phone),
+            "Tablet" => Ok(ItemCategories::Tablet),
+            _ => Err(format!("Invalid item category '{}'", s)),
         }
     }
 }
 
 fn new_elastic_id<'a> () -> Id<'a> {
     id(format!("{}", Uuid::new_v4().simple()))
+}
+
+fn item_name(make: &str, model: &str, version: &str) -> String {
+    format!("{} {} ({})", model, version, make)
 }
 
 #[derive(Debug, Serialize, Deserialize, ElasticType)]
@@ -92,8 +96,11 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String
     let mut sorted_dimensions = item.dimensions.clone();
     sorted_dimensions.sort();
 
+    // Parses the category given and make sure it is valid
     let category_enum = item.category.parse::<ItemCategories>()?;
-    let name = format!("{} {} ({})", &item.model, &item.version, &item.make);
+
+    // Compute a name for this device
+    let name = item_name(&item.make, &item.model, &item.version);
 
     let item_elastic = ItemElastic {
         category: category_enum,
@@ -110,54 +117,49 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String
 }
 
 #[post("/", format = "application/json", data = "<item_client>")]
-fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> Result<Json<Value>, status::Custom<String>> {
-
+fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> status::Custom<Json<Value>> {
     let item_elastic = match item_client_to_elastic(item_client.into_inner()) {
         Ok(i)  => i,
-        Err(err) => return Err(status::Custom(Status::BadRequest, err)),
-    };
-    let client = match shared_client.lock() {
-        Ok(c) => c,
-        Err(err) => return Err(status::Custom(Status::InternalServerError, format!("{}", err))),
+        Err(err) => return status::Custom(Status::BadRequest, Json(json!({"error": err}))),
     };
 
-    println!("{:?}", &item_elastic);
+    let client = match shared_client.lock() {
+        Ok(c) => c,
+        Err(err) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal databse connection"}))),
+    };
 
     let response = match client.document_index(index("items"), id(new_elastic_id()), item_elastic).send() {
         Ok(r) => r,
-        Err(err) => return Err(status::Custom(Status::BadGateway, format!("{}", err))),
+        Err(err) => return status::Custom(Status::BadGateway, Json(json!({"error": format!("{}", err)}))),
     };
 
-    println!("{:?}", &response);
-    Ok(Json(json!({"id": response.id()})))
+    status::Custom(Status::Created, Json(json!({"id": response.id()})))
 }
 
 #[get("/<item_id>")]
-fn item_get(item_id: ElasticId, shared_client: State<SharedClient>) -> Result<Json<Value>, status::Custom<String>> {
+fn item_get(item_id: ElasticId, shared_client: State<SharedClient>) -> status::Custom<Json<Value>> {
     let client = match shared_client.lock() {
         Ok(c) => c,
-        Err(err) => return Err(status::Custom(Status::InternalServerError, format!("{}", err))),
+        Err(err) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal databse connection"}))),
     };
 
     let response = match client.document_get::<ItemElastic>(index("items"), id(item_id)).send() {
         Ok(r) => r,
-        Err(err) => return Err(status::Custom(Status::BadGateway, format!("{}", err))),
+        Err(err) => return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"}))),
     };
 
     let doc = match response.into_document() {
         Some(d) => d,
-        None => return Err(status::Custom(Status::NotFound, String::from("Item does not exist"))),
+        None => return status::Custom(Status::NotFound, Json(json!({"error": "Item does not exist"}))),
     };
-    Ok(Json(json!(doc)))
+    status::Custom(Status::Ok, Json(json!(doc)))
 }
-
 
 
 #[error(404)]
 fn not_found() -> Json<Value> {
     Json(json!({
-        "status": "error",
-        "reason": "Resource was not found."
+        "error": "Resource was not found."
     }))
 }
 
