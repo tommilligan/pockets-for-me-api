@@ -63,7 +63,7 @@ struct ItemDimensions {
 
 #[derive(Debug, Serialize, Deserialize, ElasticType)]
 struct ItemElasticComputed {
-    unique_name: String
+    name: String
 }
 
 #[derive(Debug, Serialize, Deserialize, ElasticType)]
@@ -103,7 +103,7 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String
 
     let item_elastic = ItemElastic {
         computed: ItemElasticComputed {
-            unique_name: format!("{} {} ({})", item.model, item.version, item.make)
+            name: format!("{} {} ({})", item.model, item.version, item.make)
         },
         data: ItemElasticData {
             category: category_enum,
@@ -132,10 +132,7 @@ fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>
 
     println!("{:?}", item_elastic);
 
-    Ok(Json(json!({
-        "status": "success",
-        "reason": "We always win when creating!"
-    })))
+    Ok(Json(json!(item_elastic)))
 }
 
 #[get("/<id>")]
