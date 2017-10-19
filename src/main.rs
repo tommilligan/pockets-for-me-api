@@ -132,12 +132,23 @@ fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>
     Ok(Json(json!({"id": response.id()})))
 }
 
-#[get("/<id>")]
-fn item_get(id: ElasticId) -> Json<Value> {
-    Json(json!({
-        "status": "success",
-        "reason": "We always win when getting!"
-    }))
+#[get("/<item_id>")]
+fn item_get(item_id: ElasticId, shared_client: State<SharedClient>) -> Result<Json<Value>, status::Custom<String>> {
+    let client = match shared_client.lock() {
+        Ok(c) => c,
+        Err(err) => return Err(status::Custom(Status::InternalServerError, format!("{}", err))),
+    };
+
+    let response = match client.document_get::<ItemElastic>(index("items"), id(item_id)).send() {
+        Ok(r) => r,
+        Err(err) => return Err(status::Custom(Status::BadGateway, format!("{}", err))),
+    };
+
+    let doc = match response.into_document() {
+        Some(d) => d,
+        None => return Err(status::Custom(Status::NotFound, String::from("Item does not exist"))),
+    };
+    Ok(Json(json!(doc)))
 }
 
 
