@@ -27,6 +27,10 @@ use elastic::client::SyncClient;
 
 use std::str::FromStr;
 
+// Other imports
+extern crate uuid;
+use uuid::{Uuid, Simple};
+
 
 // We need to define our DB connection for state storage
 type SharedClient = Mutex<SyncClient>;
@@ -54,42 +58,31 @@ impl FromStr for ItemCategories {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ElasticType)]
-struct ItemDimensions {
-    x: i32,
-    y: i32,
-    z: i32
-}
-
-#[derive(Debug, Serialize, Deserialize, ElasticType)]
-struct ItemElasticComputed {
-    name: String
-}
-
-#[derive(Debug, Serialize, Deserialize, ElasticType)]
-struct ItemElasticData {
-    category: ItemCategories,
-    make: String,
-    model: String,
-    version: String,
-    description: String,
-    dimensions: ItemDimensions
+fn new_elastic_id<'a> () -> Id<'a> {
+    id(format!("{}", Uuid::new_v4().simple()))
 }
 
 #[derive(Debug, Serialize, Deserialize, ElasticType)]
 struct ItemElastic {
-    computed: ItemElasticComputed,
-    data: ItemElasticData
+    category: ItemCategories,
+    description: String,
+    dimension_x: i32,
+    dimension_y: i32,
+    dimension_z: i32,
+    make: String,
+    model: String,
+    name: String,
+    version: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ItemClient {
     category: String,
+    description: String,
+    dimensions: [i32; 3],
     make: String,
     model: String,
     version: String,
-    description: String,
-    dimensions: [i32; 3]
 }
 
 fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String> {
@@ -100,23 +93,18 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String
     sorted_dimensions.sort();
 
     let category_enum = item.category.parse::<ItemCategories>()?;
+    let name = format!("{} {} ({})", &item.model, &item.version, &item.make);
 
     let item_elastic = ItemElastic {
-        computed: ItemElasticComputed {
-            name: format!("{} {} ({})", item.model, item.version, item.make)
-        },
-        data: ItemElasticData {
-            category: category_enum,
-            make: item.make,
-            model: item.model,
-            version: item.version,
-            description: item.description,
-            dimensions: ItemDimensions {
-                x: sorted_dimensions[2],
-                y: sorted_dimensions[1],
-                z: sorted_dimensions[0]
-            }
-        }
+        category: category_enum,
+        description: item.description,
+        dimension_x: sorted_dimensions[2],
+        dimension_y: sorted_dimensions[1],
+        dimension_z: sorted_dimensions[0],
+        make: item.make,
+        model: item.model,
+        name: name,
+        version: item.version,
     };
     Ok(item_elastic)
 }
@@ -128,11 +116,20 @@ fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>
         Ok(i)  => i,
         Err(err) => return Err(status::Custom(Status::BadRequest, err)),
     };
-    let client = shared_client.lock().expect("Could not get elastic client lock");
+    let client = match shared_client.lock() {
+        Ok(c) => c,
+        Err(err) => return Err(status::Custom(Status::InternalServerError, format!("{}", err))),
+    };
 
-    println!("{:?}", item_elastic);
+    println!("{:?}", &item_elastic);
 
-    Ok(Json(json!(item_elastic)))
+    let response = match client.document_index(index("items"), id(new_elastic_id()), item_elastic).send() {
+        Ok(r) => r,
+        Err(err) => return Err(status::Custom(Status::BadGateway, format!("{}", err))),
+    };
+
+    println!("{:?}", &response);
+    Ok(Json(json!({"id": response.id()})))
 }
 
 #[get("/<id>")]
