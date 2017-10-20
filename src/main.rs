@@ -2,6 +2,12 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
 
+// Logging
+
+#![feature(use_extern_macros)]
+#[macro_use(log)] extern crate log;
+
+
 extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
 #[macro_use] extern crate serde_derive;
@@ -32,9 +38,10 @@ extern crate uuid;
 use uuid::Uuid;
 
 
+
+
 // We need to define our DB connection for state storage
 type SharedClient = Mutex<SyncClient>;
-
 
 // Client code
 
@@ -90,6 +97,7 @@ struct ItemClient {
 }
 
 fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String> {
+    log::info!("Converting client submitted item to Elastic document");
     let item = item_client;
 
     // Store dimensions in descending order
@@ -118,19 +126,20 @@ fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String
 
 #[post("/", format = "application/json", data = "<item_client>")]
 fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>) -> status::Custom<Json<Value>> {
+    log::info!("Creating new item");
     let item_elastic = match item_client_to_elastic(item_client.into_inner()) {
         Ok(i)  => i,
-        Err(err) => return status::Custom(Status::BadRequest, Json(json!({"error": err}))),
+        Err(e) => return status::Custom(Status::BadRequest, Json(json!({"error": e}))),
     };
 
     let client = match shared_client.lock() {
         Ok(c) => c,
-        Err(err) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal databse connection"}))),
+        Err(_e) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal databse connection"}))),
     };
 
     let response = match client.document_index(index("items"), id(new_elastic_id()), item_elastic).send() {
         Ok(r) => r,
-        Err(err) => return status::Custom(Status::BadGateway, Json(json!({"error": format!("{}", err)}))),
+        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Database error"}))),
     };
 
     status::Custom(Status::Created, Json(json!({"id": response.id()})))
@@ -138,14 +147,15 @@ fn item_create(item_client: Json<ItemClient>, shared_client: State<SharedClient>
 
 #[get("/<item_id>")]
 fn item_get(item_id: ElasticId, shared_client: State<SharedClient>) -> status::Custom<Json<Value>> {
+    log::info!("Getting item");
     let client = match shared_client.lock() {
         Ok(c) => c,
-        Err(err) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal databse connection"}))),
+        Err(_e) => return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not access internal database connection"}))),
     };
 
     let response = match client.document_get::<ItemElastic>(index("items"), id(item_id)).send() {
         Ok(r) => r,
-        Err(err) => return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"}))),
+        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"}))),
     };
 
     let doc = match response.into_document() {
@@ -164,7 +174,6 @@ fn not_found() -> Json<Value> {
 }
 
 fn rocket() -> rocket::Rocket {
-
     let builder = SyncClientBuilder::new()
         .base_url("http://localhost:9200")
         .params(|p| p
