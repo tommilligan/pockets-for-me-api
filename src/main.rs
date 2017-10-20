@@ -71,9 +71,9 @@ fn item_name(make: &str, model: &str, version: &str) -> String {
 struct ItemElastic {
     category: ItemCategories,
     description: String,
-    dimension_x: i32,
-    dimension_y: i32,
-    dimension_z: i32,
+    dimension_x: i64,
+    dimension_y: i64,
+    dimension_z: i64,
     make: String,
     model: String,
     name: String,
@@ -84,7 +84,7 @@ struct ItemElastic {
 struct ItemClient {
     category: String,
     description: String,
-    dimensions: [i32; 3],
+    dimensions: [i64; 3],
     make: String,
     model: String,
     version: String,
@@ -161,9 +161,14 @@ fn rocket() -> rocket::Rocket {
     let builder = SyncClientBuilder::new()
         .base_url("http://localhost:9200")
         .params(|p| p
-            .url_param("pretty", true));
+            .url_param("pretty", true)
+        );
 
     let client = builder.build().expect("Could not build elastic client");
+
+    // Make sure indexes are typed correctly
+    client.document_put_mapping::<ItemElastic>(index("items"))
+        .send().expect("Items index already had a conflicting mapping");
 
     rocket::ignite()
         .mount("/items", routes![item_create, item_get])
