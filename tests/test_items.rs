@@ -17,6 +17,12 @@ use elastic::error::ApiError::IndexNotFound;
 use pockets_for_me_api::types::response::CreatedResponse;
 use pockets_for_me_api::types::elastic::items::ItemElastic;
 
+use std::{thread, time};
+
+fn pause(duration: u64) -> () {
+    thread::sleep(time::Duration::from_millis(duration));
+}
+
 describe! stainless {
     before_each {
         let es = elastic_client();
@@ -50,12 +56,13 @@ describe! stainless {
         let body = res.body().unwrap().into_string().unwrap();
         println!("{}", &body);
         let j: CreatedResponse = serde_json::from_str(&body).unwrap();
-
-        // Check we got an id back, and use t to get the created object back
         let created_id = j.id;
-        let endpoint = format!("/items/{}", created_id);
+
+        // Pause to check index has caught up
+        pause(1000);
 
         // Check that the item exists with the correct contents
+        let endpoint = format!("/items/{}", created_id);
         let mut res = client.get(endpoint).header(ContentType::JSON).dispatch();
         assert_eq!(res.status(), Status::Ok);
         let body = res.body().unwrap().into_string().unwrap();
@@ -64,6 +71,37 @@ describe! stainless {
         assert_eq!(j.model, "iPhone");
         assert_eq!(j.dimension_x, 116);
     }
+    
+    it "post then search an item" {
+        // Add a new item
+        let res = client.post("/items")
+            .header(ContentType::JSON)
+            .body(r#"{
+                "category": "Phone",
+                "make": "Apple",
+                "model": "iPhone",
+                "version": "4",
+                "description": "Apple's last truly reliable phone; the Nokia brick of the smartphone era",
+                "dimensions": [59, 116, 10]
+            }"#)
+            .dispatch();
+
+        assert_eq!(res.status(), Status::Created);
+
+        // Pause to check index has caught up
+        pause(1000);
+
+        // Check we can find the item in a search (fuzzy)
+        let endpoint = "/items?name=pple";
+        let mut res = client.get(endpoint).header(ContentType::JSON).dispatch();
+        assert_eq!(res.status(), Status::Ok);
+        let body = res.body().unwrap().into_string().unwrap();
+        let j: Vec<ItemElastic> = serde_json::from_str(&body).unwrap();
+        println!("{:?}", j);
+        assert_eq!(j[0].model, "iPhone");
+        assert_eq!(j[0].dimension_x, 116);
+    }
+    
 
     it "fails to get an item that does not exist" {
         let res = client.get("/items/spam").header(ContentType::JSON).dispatch();
