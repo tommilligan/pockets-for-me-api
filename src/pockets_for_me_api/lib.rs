@@ -1,78 +1,38 @@
-// Rocket imports
+// Root crate imports
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
 #![cfg_attr(test, plugin(stainless))]
+#![feature(use_extern_macros)]
 
 // Logging
+#[macro_use(log)]
+extern crate log;
 
-#![feature(use_extern_macros)]
-#[macro_use(log)] extern crate log;
-
-
+// Rocket
 extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
 #[macro_use] extern crate serde_derive;
-
-#[cfg(test)] mod tests;
-
 use rocket_contrib::{Json, Value};
 
-use rocket::State;
-
-use rocket::response::status;
-use rocket::http::Status;
-
 // Elastic imports
-
 extern crate elastic;
 #[macro_use]
 extern crate elastic_derive;
-
 use elastic::prelude::*;
 use elastic::client::SyncClient;
 
 
-// Modules
-
+// Internal modules
 pub mod types;
-use types::ElasticId;
 use types::elastic::items::ItemElastic;
-use types::query::items::ItemClient;
-
 pub mod generate;
+pub mod routes;
+
+// Unit tests
+#[cfg(test)] mod tests;
+
 
 // Client code
-
-#[post("/", format = "application/json", data = "<item_client>")]
-fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
-    log::info!("Creating new item");
-    let item_elastic = match ItemElastic::from_item_client(item_client.into_inner()) {
-        Ok(i)  => i,
-        Err(e) => return status::Custom(Status::BadRequest, Json(json!({"error": e}))),
-    };
-
-    let response = match elastic_client.document_index(index("items"), id(generate::elastic_id()), item_elastic).send() {
-        Ok(r) => r,
-        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Database error"}))),
-    };
-
-    status::Custom(Status::Created, Json(json!({"id": response.id()})))
-}
-
-#[get("/<item_id>")]
-fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
-    log::info!("Getting item");
-    let response = match elastic_client.document_get::<ItemElastic>(index("items"), id(item_id)).send() {
-        Ok(r) => r,
-        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"}))),
-    };
-
-    let doc = match response.into_document() {
-        Some(d) => d,
-        None => return status::Custom(Status::NotFound, Json(json!({"error": "Item does not exist"}))),
-    };
-    status::Custom(Status::Ok, Json(json!(doc)))
-}
 
 
 #[error(404)]
@@ -101,7 +61,7 @@ pub fn rocket() -> rocket::Rocket {
         .send().expect("Items index already had a conflicting mapping");
 
     rocket::ignite()
-        .mount("/items", routes![item_create, item_get])
+        .mount("/items", routes::items::routes("items"))
         .catch(errors![not_found])
         .manage(client)
 }
