@@ -2,7 +2,7 @@
 language: rust
 rust: nightly
 cache: cargo
-install: true # cargo test will also perform a build
+install: true # cargo test will also perform an install + build
 script: cargo test --verbose -- --test-threads=1
 
 services:
@@ -16,7 +16,7 @@ notifications:
 
 # heroku deploy
 before_deploy:
-  - rm -rf target/debug
+  - cargo clean
   - cargo build --verbose --release
 
 deploy:

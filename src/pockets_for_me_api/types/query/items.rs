@@ -8,3 +8,9 @@ pub struct ItemClient {
     pub model: String,
     pub version: String,
 }
+
+impl ItemClient {
+    pub fn name(&self) -> String {
+        format!("{} {} ({})", &self.model, &self.version, &self.make)
+    }
+}

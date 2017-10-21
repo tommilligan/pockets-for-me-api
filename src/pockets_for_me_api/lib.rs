@@ -32,66 +32,26 @@ use elastic::prelude::*;
 use elastic::client::SyncClient;
 
 
-// Other imports
-extern crate uuid;
-use uuid::Uuid;
-
-
 // Modules
 
 pub mod types;
 use types::ElasticId;
-use types::elastic::items::{ItemElastic, ItemCategories};
+use types::elastic::items::ItemElastic;
 use types::query::items::ItemClient;
 
+pub mod generate;
 
 // Client code
-
-fn new_elastic_id<'a> () -> Id<'a> {
-    id(format!("{}", Uuid::new_v4().simple()))
-}
-
-fn item_name(make: &str, model: &str, version: &str) -> String {
-    format!("{} {} ({})", model, version, make)
-}
-
-fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String> {
-    log::info!("Converting client submitted item to Elastic document");
-    let item = item_client;
-
-    // Store dimensions in descending order
-    let mut sorted_dimensions = item.dimensions.clone();
-    sorted_dimensions.sort();
-
-    // Parses the category given and make sure it is valid
-    let category_enum = item.category.parse::<ItemCategories>()?;
-
-    // Compute a name for this device
-    let name = item_name(&item.make, &item.model, &item.version);
-
-    let item_elastic = ItemElastic {
-        category: category_enum,
-        description: item.description,
-        dimension_x: sorted_dimensions[2],
-        dimension_y: sorted_dimensions[1],
-        dimension_z: sorted_dimensions[0],
-        make: item.make,
-        model: item.model,
-        name: name,
-        version: item.version,
-    };
-    Ok(item_elastic)
-}
 
 #[post("/", format = "application/json", data = "<item_client>")]
 fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
     log::info!("Creating new item");
-    let item_elastic = match item_client_to_elastic(item_client.into_inner()) {
+    let item_elastic = match ItemElastic::from_item_client(item_client.into_inner()) {
         Ok(i)  => i,
         Err(e) => return status::Custom(Status::BadRequest, Json(json!({"error": e}))),
     };
 
-    let response = match elastic_client.document_index(index("items"), id(new_elastic_id()), item_elastic).send() {
+    let response = match elastic_client.document_index(index("items"), id(generate::elastic_id()), item_elastic).send() {
         Ok(r) => r,
         Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Database error"}))),
     };
