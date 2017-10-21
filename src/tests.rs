@@ -5,31 +5,8 @@ use rocket::http::{Status, ContentType};
 
 extern crate serde_json;
 
-
-
-#[derive(Debug, Serialize, Deserialize)]
-enum ItemCategories {
-    Phone,
-    Tablet
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ItemElastic {
-    category: ItemCategories,
-    description: String,
-    dimension_x: i32,
-    dimension_y: i32,
-    dimension_z: i32,
-    make: String,
-    model: String,
-    name: String,
-    version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CreatedResponse {
-    id: String
-}
+use types::CreatedResponse;
+use types::items::ItemElastic;
 
 #[test]
 fn post_get() {

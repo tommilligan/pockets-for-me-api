@@ -30,34 +30,20 @@ extern crate elastic_derive;
 use elastic::prelude::*;
 use elastic::client::SyncClient;
 
-use std::str::FromStr;
 
 // Other imports
 extern crate uuid;
 use uuid::Uuid;
 
 
+// Modules
+
+pub mod types;
+use types::ElasticId;
+use types::items::{ItemClient, ItemElastic, ItemCategories};
+
+
 // Client code
-
-type ElasticId = String;
-
-#[derive(Debug, Serialize, Deserialize)]
-enum ItemCategories {
-    Phone,
-    Tablet
-}
-impl KeywordFieldType<DefaultKeywordMapping> for ItemCategories {}
-impl FromStr for ItemCategories {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<ItemCategories, String> {
-        match s {
-            "Phone" => Ok(ItemCategories::Phone),
-            "Tablet" => Ok(ItemCategories::Tablet),
-            _ => Err(format!("Invalid item category '{}'", s)),
-        }
-    }
-}
 
 fn new_elastic_id<'a> () -> Id<'a> {
     id(format!("{}", Uuid::new_v4().simple()))
@@ -65,29 +51,6 @@ fn new_elastic_id<'a> () -> Id<'a> {
 
 fn item_name(make: &str, model: &str, version: &str) -> String {
     format!("{} {} ({})", model, version, make)
-}
-
-#[derive(Debug, Serialize, Deserialize, ElasticType)]
-struct ItemElastic {
-    category: ItemCategories,
-    description: String,
-    dimension_x: i64,
-    dimension_y: i64,
-    dimension_z: i64,
-    make: String,
-    model: String,
-    name: String,
-    version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ItemClient {
-    category: String,
-    description: String,
-    dimensions: [i64; 3],
-    make: String,
-    model: String,
-    version: String,
 }
 
 fn item_client_to_elastic(item_client: ItemClient) -> Result<ItemElastic, String> {
