@@ -1,8 +1,5 @@
-
-
 use elastic::prelude::*;
 use std::str::FromStr;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ItemCategories {
@@ -32,15 +29,5 @@ pub struct ItemElastic {
     pub make: String,
     pub model: String,
     pub name: String,
-    pub version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ItemClient {
-    pub category: String,
-    pub description: String,
-    pub dimensions: [i64; 3],
-    pub make: String,
-    pub model: String,
     pub version: String,
 }

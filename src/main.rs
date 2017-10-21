@@ -1,6 +1,7 @@
 // Rocket imports
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
+#![cfg_attr(test, plugin(stainless))]
 
 // Logging
 
@@ -40,7 +41,8 @@ use uuid::Uuid;
 
 pub mod types;
 use types::ElasticId;
-use types::items::{ItemClient, ItemElastic, ItemCategories};
+use types::elastic::items::{ItemElastic, ItemCategories};
+use types::query::items::ItemClient;
 
 
 // Client code

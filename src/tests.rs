@@ -5,8 +5,8 @@ use rocket::http::{Status, ContentType};
 
 extern crate serde_json;
 
-use types::CreatedResponse;
-use types::items::ItemElastic;
+use types::response::CreatedResponse;
+use types::elastic::items::ItemElastic;
 
 #[test]
 fn post_get() {
