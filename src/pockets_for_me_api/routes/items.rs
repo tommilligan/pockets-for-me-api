@@ -18,7 +18,7 @@ use elastic::client::SyncClient;
 
 use types::ElasticId;
 use types::elastic::items::ItemElastic;
-use types::query::items::ItemClient;
+use types::query::items::{ItemClient, ItemSearch};
 use generate;
 
 #[post("/", format = "application/json", data = "<item_client>")]
@@ -52,6 +52,34 @@ fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Cu
     status::Custom(Status::Ok, Json(json!(doc)))
 }
 
+#[get("/?<search_form>")]
+fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
+    log::info!("Searching items");
+    let query = json!({
+        "query": {
+            "match": {
+                "name": {
+                    "query": search_form.name,
+                    "operator": "and",
+                    "fuzziness": "AUTO"
+                }
+            }
+        }
+    });
+    log::info!("Searching for item with query; {}", query);
+    let response = match elastic_client.search::<ItemElastic>().index("items").body(query).send() {
+        Ok(r) => r,
+        Err(e) => {
+            log::error!("Search failed; {:?}", e);
+            return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
+        }
+    };
+
+    let results: Vec<ItemElastic> = response.into_documents().collect();
+    status::Custom(Status::Ok, Json(json!(results)))
+}
+
+
 pub fn routes() -> Vec<Route> {
-    routes![item_create, item_get]
+    routes![item_create, item_get, item_search]
 }

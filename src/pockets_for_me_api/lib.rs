@@ -3,6 +3,7 @@
 #![plugin(rocket_codegen)]
 #![cfg_attr(test, plugin(stainless))]
 #![feature(use_extern_macros)]
+#![feature(custom_derive)]
 
 // Logging
 #[macro_use(log)]
