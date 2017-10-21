@@ -23,7 +23,7 @@ describe! stainless {
         let response = match es.index_delete(index("items")).send() {
             Ok(r) => (),
             Err(Api(IndexNotFound{ index: _i })) => (),
-            Err(e) => panic!(e),
+            Err(e) => panic!(format!("Could not delete elastic indexes: {}", e)),
         };
         es.index_create(index("items")).send().expect("Could not create items index");        
         es.document_put_mapping::<ItemElastic>(index("items"))

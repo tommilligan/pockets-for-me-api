@@ -52,6 +52,6 @@ fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Cu
     status::Custom(Status::Ok, Json(json!(doc)))
 }
 
-pub fn routes(index_name: &str) -> Vec<Route> {
+pub fn routes() -> Vec<Route> {
     routes![item_create, item_get]
 }

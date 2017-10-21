@@ -27,6 +27,7 @@ pub mod types;
 use types::elastic::items::ItemElastic;
 pub mod generate;
 pub mod routes;
+pub mod constants;
 
 // Unit tests
 #[cfg(test)] mod tests;
@@ -61,7 +62,7 @@ pub fn rocket() -> rocket::Rocket {
         .send().expect("Items index already had a conflicting mapping");
 
     rocket::ignite()
-        .mount("/items", routes::items::routes("items"))
+        .mount("/items", routes::items::routes())
         .catch(errors![not_found])
         .manage(client)
 }
