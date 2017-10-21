@@ -3,7 +3,7 @@ language: rust
 rust: nightly
 cache: cargo
 install: true # cargo test will also perform a build
-script: cargo test --verbose
+script: cargo test --verbose -- --test-threads=1
 
 services:
   - elasticsearch

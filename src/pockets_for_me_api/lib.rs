@@ -122,7 +122,7 @@ fn not_found() -> Json<Value> {
     }))
 }
 
-fn rocket() -> rocket::Rocket {
+pub fn elastic_client() -> SyncClient {
     let builder = SyncClientBuilder::new()
         .base_url("http://localhost:9200")
         .params(|p| p
@@ -130,6 +130,11 @@ fn rocket() -> rocket::Rocket {
         );
 
     let client = builder.build().expect("Could not build elastic client");
+    client
+}
+
+pub fn rocket() -> rocket::Rocket {
+    let client = elastic_client();
 
     // Make sure indexes are typed correctly
     client.document_put_mapping::<ItemElastic>(index("items"))
@@ -139,8 +144,4 @@ fn rocket() -> rocket::Rocket {
         .mount("/items", routes![item_create, item_get])
         .catch(errors![not_found])
         .manage(client)
-}
-
-fn main() {
-    rocket().launch();
 }
