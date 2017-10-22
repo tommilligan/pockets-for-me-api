@@ -32,9 +32,7 @@ pub mod admin;
 // Unit tests
 #[cfg(test)] mod tests;
 
-
 // Client code
-
 pub fn elastic_client() -> Result<SyncClient, elastic::Error> {
     let builder = SyncClientBuilder::new()
         .base_url(constants::elastic_url())

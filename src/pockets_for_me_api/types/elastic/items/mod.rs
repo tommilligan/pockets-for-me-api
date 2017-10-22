@@ -5,7 +5,11 @@ use super::super::query::items::ItemClient;
 
 extern crate log;
 
-#[derive(Debug, Serialize, Deserialize)]
+// Unit tests
+#[cfg(test)] mod tests;
+
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum ItemCategories {
     Phone,
     Tablet
@@ -23,7 +27,7 @@ impl FromStr for ItemCategories {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ElasticType)]
+#[derive(Debug, Serialize, Deserialize, ElasticType, PartialEq)]
 pub struct ItemElastic {
     pub category: ItemCategories,
     pub description: String,
