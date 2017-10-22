@@ -22,7 +22,7 @@ fn pause(duration: u64) -> () {
 
 describe! stainless {
     before_each {
-        let es = elastic_client();
+        let es = elastic_client().unwrap();
         ensure_index_deleted_items(&es).unwrap();
         let client = Client::new(rocket()).unwrap();
     }

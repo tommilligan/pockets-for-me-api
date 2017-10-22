@@ -13,7 +13,6 @@ extern crate log;
 extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
 #[macro_use] extern crate serde_derive;
-use rocket_contrib::{Json, Value};
 
 // Elastic imports
 extern crate elastic;
@@ -36,33 +35,33 @@ pub mod admin;
 
 // Client code
 
-
-#[error(404)]
-fn not_found() -> Json<Value> {
-    Json(json!({
-        "error": "Resource was not found."
-    }))
-}
-
-pub fn elastic_client() -> SyncClient {
+pub fn elastic_client() -> Result<SyncClient, elastic::Error> {
     let builder = SyncClientBuilder::new()
-        .base_url("http://localhost:9200")
+        .base_url(constants::elastic_url())
         .params(|p| p
             .url_param("pretty", true)
         );
 
-    let client = builder.build().expect("Could not build elastic client");
-    client
+    let client = builder.build()?;
+    client.ping().send()?;
+    Ok(client)
 }
 
 pub fn rocket() -> rocket::Rocket {
-    let client = elastic_client();
+    match elastic_client() {
+        Ok(client) => {
+            // Make sure all indexes exist and are typed correctly
+            admin::elastic::ensure_index_mapped_all(&client).unwrap();
 
-    // Make sure all indexes exist and are typed correctly
-    admin::elastic::ensure_index_mapped_all(&client).unwrap();
-
-    rocket::ignite()
-        .mount("/items", routes::items::routes())
-        .catch(errors![not_found])
-        .manage(client)
+            rocket::ignite()
+                .mount("/items", routes::items::routes())
+                .catch(errors![routes::catchers::not_found])
+                .manage(client)
+        },
+        Err(e) => {
+            log::error!("{:?}", e);
+            rocket::ignite()
+                .catch(errors![routes::catchers::service_unavailable])
+        }
+    }
 }
