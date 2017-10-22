@@ -20,7 +20,7 @@ extern crate elastic;
 extern crate elastic_derive;
 use elastic::prelude::*;
 use elastic::client::SyncClient;
-
+use elastic::http::header::Authorization;
 
 // Internal modules
 pub mod types;
@@ -32,12 +32,25 @@ pub mod admin;
 // Unit tests
 #[cfg(test)] mod tests;
 
+
+extern crate base64;
+
+use base64::encode;
+
+
 // Client code
 pub fn elastic_client() -> Result<SyncClient, elastic::Error> {
+    let es_url = constants::elastic_url();
+    println!("ES URL; {}", &es_url);
+    let creds = es_url.chars().skip(8).take(25).collect::<String>();
+    println!("ES Creds; {}", &creds);
+    let encoded_creds = encode(&creds);
+    println!("Encoded creds; {}", &encoded_creds);
     let builder = SyncClientBuilder::new()
-        .base_url(constants::elastic_url())
+        .base_url(es_url)
         .params(|p| p
             .url_param("pretty", true)
+            .header(Authorization(format!("Basic {}", encoded_creds)))
         );
 
     let client = builder.build()?;
