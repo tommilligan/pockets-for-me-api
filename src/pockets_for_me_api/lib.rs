@@ -57,7 +57,7 @@ pub fn rocket() -> rocket::Rocket {
                 .manage(client)
         },
         Err(e) => {
-            log::error!("{:?}", e);
+            println!("ERROR setting up elastic client; {:?}", e);
             rocket::ignite()
                 .catch(errors![routes::catchers::service_unavailable])
         }
