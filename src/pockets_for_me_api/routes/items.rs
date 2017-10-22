@@ -26,12 +26,18 @@ fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>)
     log::info!("Creating new item");
     let item_elastic = match ItemElastic::from_item_client(item_client.into_inner()) {
         Ok(i)  => i,
-        Err(e) => return status::Custom(Status::BadRequest, Json(json!({"error": e}))),
+        Err(e) => {
+            log::warn!("{:?}", e);
+            return status::Custom(Status::BadRequest, Json(json!({"error": e})))
+        }
     };
 
     let response = match elastic_client.document_index(index("items"), id(generate::elastic_id()), item_elastic).send() {
         Ok(r) => r,
-        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Database error"}))),
+        Err(e) => {
+            log::error!("{:?}", e);
+            return status::Custom(Status::BadGateway, Json(json!({"error": "Database error"})))
+        }
     };
 
     status::Custom(Status::Created, Json(json!({"id": response.id()})))
@@ -42,12 +48,18 @@ fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Cu
     log::info!("Getting item");
     let response = match elastic_client.document_get::<ItemElastic>(index("items"), id(item_id)).send() {
         Ok(r) => r,
-        Err(_e) => return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"}))),
+        Err(e) => {
+            log::error!("{:?}", e);
+            return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
+        }
     };
 
     let doc = match response.into_document() {
         Some(d) => d,
-        None => return status::Custom(Status::NotFound, Json(json!({"error": "Item does not exist"}))),
+        None => {
+            log::warn!("Item not found");
+            return status::Custom(Status::NotFound, Json(json!({"error": "Item not found"})))
+        }
     };
     status::Custom(Status::Ok, Json(json!(doc)))
 }
