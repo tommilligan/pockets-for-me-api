@@ -20,8 +20,8 @@ notifications:
   email: false
 
 # heroku deploy
--before_deploy:
-  - cargo clean
+before_deploy:
+  - rm -rf target/debug
 deploy:
   - provider: heroku
     skip_cleanup: true
