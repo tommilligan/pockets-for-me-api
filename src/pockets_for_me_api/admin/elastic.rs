@@ -6,7 +6,6 @@ use elastic::error::ApiError::{IndexNotFound, IndexAlreadyExists};
 use types::elastic::items::ItemElastic;
 
 
-
 pub fn ensure_index_deleted_items(client: &SyncClient) -> Result<(), elastic::error::Error> {
     match client.index_delete(index("items")).send() {
         Ok(_r) => Ok(()),
@@ -18,7 +17,15 @@ pub fn ensure_index_deleted_items(client: &SyncClient) -> Result<(), elastic::er
 
 pub fn ensure_index_mapped_items(client: &SyncClient) -> Result<(), elastic::error::Error> {
     let index_name = "items";
-    match client.index_create(index(index_name)).send() {
+    let body = json!({
+        "settings": {
+            "index": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+            }
+        }
+    });
+    match client.index_create(index(index_name)).body(body.to_string()).send() {
         Ok(_r) => Ok(()),
         Err(Api(IndexAlreadyExists{ index: _i })) => Ok(()),
         Err(e) => Err(e),
