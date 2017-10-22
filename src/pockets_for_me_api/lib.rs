@@ -32,26 +32,36 @@ pub mod admin;
 // Unit tests
 #[cfg(test)] mod tests;
 
-
 extern crate base64;
-
 use base64::encode;
 
 
 // Client code
+
 pub fn elastic_client() -> Result<SyncClient, elastic::Error> {
     let es_url = constants::elastic_url();
-    println!("ES URL; {}", &es_url);
-    let creds = es_url.chars().skip(8).take(25).collect::<String>();
-    println!("ES Creds; {}", &creds);
-    let encoded_creds = encode(&creds);
-    println!("Encoded creds; {}", &encoded_creds);
-    let builder = SyncClientBuilder::new()
-        .base_url(es_url)
-        .params(|p| p
-            .url_param("pretty", true)
-            .header(Authorization(format!("Basic {}", encoded_creds)))
-        );
+
+    // If we are on heroku, we need to pull basic auth credentials from
+    // the URL to pass as a basic auth header
+    let builder = match constants::env_heroku() {
+        true => {
+            let creds = &es_url.chars().skip(8).take(25).collect::<String>();
+            let encoded_creds = encode(&creds);
+            SyncClientBuilder::new()
+                .base_url(es_url)
+                .params(|p| p
+                    .url_param("pretty", true)
+                    .header(Authorization(format!("Basic {}", &encoded_creds)))
+                )
+        },
+        false => {
+            SyncClientBuilder::new()
+                .base_url(es_url)
+                .params(|p| p
+                    .url_param("pretty", true)
+                )
+        }
+    };
 
     let client = builder.build()?;
     client.ping().send()?;
