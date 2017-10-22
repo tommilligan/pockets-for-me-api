@@ -21,6 +21,9 @@ use types::elastic::items::ItemElastic;
 use types::query::items::{ItemClient, ItemSearch};
 use generate;
 
+use std::thread;
+
+
 #[post("/", format = "application/json", data = "<item_client>")]
 fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
     log::info!("Creating new item");
@@ -66,29 +69,72 @@ fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Cu
 
 #[get("/?<search_form>")]
 fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
-    log::info!("Searching items");
+    // Get results in a separate thread while we handle suggestions below
+    /*
+    let results_handler = thread::spawn(move || {
+        log::info!("Searching for item suggestions");
+        let query = json!({
+            "query": {
+                "match": {
+                    "name": {
+                        "query": &search_form.name,
+                        "operator": "and",
+                        "fuzziness": "AUTO"
+                    }
+                }
+            }
+        });
+        log::info!("Searching for item with query; {}", query);
+        let response = match elastic_client.search::<ItemElastic>().index("items").body(query).send() {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("Search failed; {:?}", e);
+                return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
+            }
+        };
+
+        let results: Vec<ItemElastic> = response.into_documents().collect();
+        results
+    });
+    */
+    let results_handler = thread::spawn(|| {
+        log::info!("Searching for item suggestions");
+        String::from("hello")
+    });
+
+
+    log::info!("Searching for item name suggestions");
     let query = json!({
-        "query": {
-            "match": {
-                "name": {
-                    "query": search_form.name,
-                    "operator": "and",
-                    "fuzziness": "AUTO"
+        "suggest": {
+            "text" : &search_form.name,
+            "make" : {
+                "term" : {
+                    "field" : "name"
                 }
             }
         }
     });
-    log::info!("Searching for item with query; {}", query);
-    let response = match elastic_client.search::<ItemElastic>().index("items").body(query).send() {
+
+    // Need to use a RawRequest (https://docs.rs/elastic/0.20.1/elastic/client/struct.Client.html#raw-request)
+    // and submit PR for this!
+
+    log::info!("Searching for item name suggestions with query; {}", query);
+    let response = match elastic_client.search().index("items").body(query).send() {
         Ok(r) => r,
         Err(e) => {
             log::error!("Search failed; {:?}", e);
             return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
         }
     };
+    log::warn!("{:?}", response);
 
-    let results: Vec<ItemElastic> = response.into_documents().collect();
-    status::Custom(Status::Ok, Json(json!(results)))
+    let suggestions = response;
+
+    let results = results_handler.join().unwrap();
+    status::Custom(Status::Ok, Json(json!({
+        "results": results,
+        "suggestions": ""
+    })))
 }
 
 
