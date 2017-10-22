@@ -25,10 +25,10 @@ use elastic::client::SyncClient;
 
 // Internal modules
 pub mod types;
-use types::elastic::items::ItemElastic;
 pub mod generate;
 pub mod routes;
 pub mod constants;
+pub mod admin;
 
 // Unit tests
 #[cfg(test)] mod tests;
@@ -58,9 +58,8 @@ pub fn elastic_client() -> SyncClient {
 pub fn rocket() -> rocket::Rocket {
     let client = elastic_client();
 
-    // Make sure indexes are typed correctly
-    client.document_put_mapping::<ItemElastic>(index("items"))
-        .send().expect("Items index already had a conflicting mapping");
+    // Make sure all indexes exist and are typed correctly
+    admin::elastic::ensure_index_mapped_all(&client).unwrap();
 
     rocket::ignite()
         .mount("/items", routes::items::routes())

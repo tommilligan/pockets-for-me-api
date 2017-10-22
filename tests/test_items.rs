@@ -10,12 +10,9 @@ use pockets_for_me_api::{elastic_client, rocket};
 use rocket::local::Client;
 use rocket::http::{Status, ContentType};
 
-use elastic::prelude::*;
-use elastic::error::Error::Api;
-use elastic::error::ApiError::IndexNotFound;
-
 use pockets_for_me_api::types::response::CreatedResponse;
 use pockets_for_me_api::types::elastic::items::ItemElastic;
+use pockets_for_me_api::admin::elastic::ensure_index_deleted_items;
 
 use std::{thread, time};
 
@@ -26,15 +23,7 @@ fn pause(duration: u64) -> () {
 describe! stainless {
     before_each {
         let es = elastic_client();
-        let response = match es.index_delete(index("items")).send() {
-            Ok(r) => (),
-            Err(Api(IndexNotFound{ index: _i })) => (),
-            Err(e) => panic!(format!("Could not delete elastic indexes: {}", e)),
-        };
-        es.index_create(index("items")).send().expect("Could not create items index");        
-        es.document_put_mapping::<ItemElastic>(index("items"))
-            .send().expect("Items index already had a conflicting mapping");
-
+        ensure_index_deleted_items(&es).unwrap();
         let client = Client::new(rocket()).unwrap();
     }
 
