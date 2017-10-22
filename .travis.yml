@@ -3,7 +3,12 @@ language: rust
 rust: nightly
 cache: cargo
 install: true # cargo test will also perform an install + build
-script: cargo test --verbose -- --test-threads=1
+script:
+  # Do testing
+  - cargo test --verbose -- --test-threads=1
+  # Prod build needs to be done here ootherwise deps will not be cached
+  # otherwise would be in "before deploy"
+  - cargo build --verbose --release
 
 services:
   - elasticsearch
@@ -18,7 +23,6 @@ notifications:
 before_deploy:
   - cargo clean
   - cargo build --verbose --release
-
 deploy:
   - provider: heroku
     skip_cleanup: true
