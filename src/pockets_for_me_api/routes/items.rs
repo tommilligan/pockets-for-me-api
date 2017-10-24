@@ -23,6 +23,7 @@ use generate;
 
 use std::thread;
 
+use types::SuggestResponse;
 
 #[post("/", format = "application/json", data = "<item_client>")]
 fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
@@ -101,29 +102,33 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
         log::info!("Searching for item suggestions");
         String::from("hello")
     });
-
-
+        
     log::info!("Searching for item name suggestions");
     let query = json!({
-        "suggest": {
-            "text" : &search_form.name,
-            "make" : {
-                "term" : {
-                    "field" : "name"
-                }
+        "text" : &search_form.name,
+        "qux" : {
+            "term" : {
+                "field" : "name"
             }
         }
     });
 
-    // Need to use a RawRequest (https://docs.rs/elastic/0.20.1/elastic/client/struct.Client.html#raw-request)
-    // and submit PR for this!
 
     log::info!("Searching for item name suggestions with query; {}", query);
-    let response = match elastic_client.search().index("items").body(query).send() {
-        Ok(r) => r,
+    let req = SuggestRequest::for_index(index("items"), query);
+    let response = match elastic_client.request(req).send() {
+        Ok(r) => {
+            /*
+            let mut buf = String::new();
+            let raw = r.clone();
+            raw.into_raw().read_to_string(&mut buf);
+            log::warn!("Raw response; {:?}", buf);
+            */
+            r.into_response::<SuggestResponse>()
+        },
         Err(e) => {
             log::error!("Search failed; {:?}", e);
-            return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
+            return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item suggestions"})))
         }
     };
     log::warn!("{:?}", response);
@@ -131,8 +136,9 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
     let suggestions = response;
 
     let results = results_handler.join().unwrap();
+
     status::Custom(Status::Ok, Json(json!({
-        "results": results,
+        "results": "spam",
         "suggestions": ""
     })))
 }
