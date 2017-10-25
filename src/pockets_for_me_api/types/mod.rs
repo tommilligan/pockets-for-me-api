@@ -21,6 +21,12 @@ pub struct SuggestResponse {
     qux: Vec<Sugestee>
 }
 
+impl SuggestResponse {
+    pub fn inner(&self) -> &Vec<Sugestee> {
+        &self.qux
+    }
+}
+
 impl IsOk for SuggestResponse {
     fn is_ok<B: ResponseBody>(head: HttpResponseHead, body: Unbuffered<B>) -> Result<MaybeOkResponse<B>, ParseResponseError> {
         match head.status() {
@@ -37,6 +43,15 @@ pub struct Sugestee {
     offset: u64,
     length: u64,
     #[serde(rename = "options")] suggestions: Vec<Suggestion>
+}
+
+impl Sugestee {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn suggestions(&self) -> &Vec<Suggestion> {
+        &self.suggestions
+    }
 }
 
 #[derive(Deserialize, Debug)]

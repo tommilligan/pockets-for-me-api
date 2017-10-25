@@ -25,6 +25,9 @@ use std::thread;
 
 use types::SuggestResponse;
 
+extern crate itertools;
+use self::itertools::Itertools;
+
 #[post("/", format = "application/json", data = "<item_client>")]
 fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
     log::info!("Creating new item");
@@ -118,28 +121,55 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
     let req = SuggestRequest::for_index(index("items"), query);
     let response = match elastic_client.request(req).send() {
         Ok(r) => {
-            /*
-            let mut buf = String::new();
-            let raw = r.clone();
-            raw.into_raw().read_to_string(&mut buf);
-            log::warn!("Raw response; {:?}", buf);
-            */
-            r.into_response::<SuggestResponse>()
+            match r.into_response::<SuggestResponse>() {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("SuggestResponse deserialisation failed; {:?}", e);
+                    return status::Custom(Status::InternalServerError, Json(json!({"error": "Could not read item suggestions"})))
+                }
+            }
         },
         Err(e) => {
             log::error!("Search failed; {:?}", e);
             return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item suggestions"})))
         }
     };
-    log::warn!("{:?}", response);
+    let suggestees = response.inner();
 
-    let suggestions = response;
+    let mut suggested_names: Vec<String> = Vec::new();
+    let suggestees_length = suggestees.len();
+
+    // We need at least on suggestee to provide suggestions
+    if suggestees_length > 0 {
+        // Append final word suggestions
+        let last_index = suggestees_length - 1;
+        let last_suggestee = &suggestees[last_index];
+        let stem: String = suggestees[0..last_index]
+                .iter()
+                .map(|s| s.text())
+                .join(" ");
+        for suggestion in last_suggestee.suggestions() {
+            let n = format!("{} {}", &stem, suggestion.text());
+            suggested_names.push(n);
+        }
+
+        // Append best suggestion
+        let n: String = suggestees.iter().map(|suggestee| {
+            let suggestions = suggestee.suggestions();
+            let word: &str = match suggestions.len() {
+                0 => suggestee.text(),
+                _ => suggestions[0].text()
+            };
+            word
+        }).join(" ");
+        suggested_names.push(n);
+    }
 
     let results = results_handler.join().unwrap();
 
     status::Custom(Status::Ok, Json(json!({
-        "results": "spam",
-        "suggestions": ""
+        "results": results,
+        "suggestions": suggested_names
     })))
 }
 
