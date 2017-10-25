@@ -3,6 +3,7 @@ extern crate log;
 // Rocket
 extern crate rocket;
 extern crate rocket_contrib;
+extern crate serde_json;
 extern crate serde_derive;
 use rocket_contrib::{Json, Value};
 use rocket::{Route, State};
@@ -17,6 +18,7 @@ use elastic::client::SyncClient;
 
 
 use types::ElasticId;
+use types::response::{CreatedResponse, SearchResponse};
 use types::elastic::items::ItemElastic;
 use types::query::items::{ItemClient, ItemSearch};
 use generate;
@@ -47,7 +49,7 @@ fn item_create(item_client: Json<ItemClient>, elastic_client: State<SyncClient>)
         }
     };
 
-    status::Custom(Status::Created, Json(json!({"id": response.id()})))
+    status::Custom(Status::Created, Json(json!(CreatedResponse::new(String::from(response.id())))))
 }
 
 #[get("/<item_id>")]
@@ -73,40 +75,31 @@ fn item_get(item_id: ElasticId, elastic_client: State<SyncClient>) -> status::Cu
 
 #[get("/?<search_form>")]
 fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> status::Custom<Json<Value>> {
-    // Get results in a separate thread while we handle suggestions below
-    /*
-    let results_handler = thread::spawn(move || {
-        log::info!("Searching for item suggestions");
-        let query = json!({
-            "query": {
-                "match": {
-                    "name": {
-                        "query": &search_form.name,
-                        "operator": "and",
-                        "fuzziness": "AUTO"
-                    }
+    // RESULTS
+    // TODO Get results in a separate thread while we handle suggestions below
+    let query = json!({
+        "query": {
+            "match": {
+                "name": {
+                    "query": &search_form.name,
+                    "operator": "and",
+                    "fuzziness": "AUTO"
                 }
             }
-        });
-        log::info!("Searching for item with query; {}", query);
-        let response = match elastic_client.search::<ItemElastic>().index("items").body(query).send() {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("Search failed; {:?}", e);
-                return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
-            }
-        };
+        }
+    });
+    log::info!("Searching for item with query; {}", query);
+    let response = match elastic_client.search::<ItemElastic>().index("items").body(query).send() {
+        Ok(r) => r,
+        Err(e) => {
+            log::error!("Search failed; {:?}", e);
+            return status::Custom(Status::BadGateway, Json(json!({"error": "Could not get item"})))
+        }
+    };
 
-        let results: Vec<ItemElastic> = response.into_documents().collect();
-        results
-    });
-    */
-    let results_handler = thread::spawn(|| {
-        log::info!("Searching for item suggestions");
-        String::from("hello")
-    });
-        
-    log::info!("Searching for item name suggestions");
+    let results: Vec<ItemElastic> = response.into_documents().collect();
+    
+    // SUGGESTIONS
     let query = json!({
         "text" : &search_form.name,
         "qux" : {
@@ -115,8 +108,6 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
             }
         }
     });
-
-
     log::info!("Searching for item name suggestions with query; {}", query);
     let req = SuggestRequest::for_index(index("items"), query);
     let response = match elastic_client.request(req).send() {
@@ -135,6 +126,7 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
         }
     };
     let suggestees = response.inner();
+    log::info!("Raw suggestions; {:?}", suggestees);
 
     let mut suggested_names: Vec<String> = Vec::new();
     let suggestees_length = suggestees.len();
@@ -165,11 +157,9 @@ fn item_search(search_form: ItemSearch, elastic_client: State<SyncClient>) -> st
         suggested_names.push(n);
     }
 
-    let results = results_handler.join().unwrap();
-
-    status::Custom(Status::Ok, Json(json!({
-        "results": results,
-        "suggestions": suggested_names
+    status::Custom(Status::Ok, Json(json!(SearchResponse::<ItemElastic> {
+        results: results,
+        suggestions: suggested_names
     })))
 }
 

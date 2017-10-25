@@ -10,7 +10,7 @@ use pockets_for_me_api::{elastic_client, rocket};
 use rocket::local::Client;
 use rocket::http::{Status, ContentType};
 
-use pockets_for_me_api::types::response::CreatedResponse;
+use pockets_for_me_api::types::response::{CreatedResponse, SearchResponse};
 use pockets_for_me_api::types::elastic::items::ItemElastic;
 use pockets_for_me_api::admin::elastic::ensure_index_deleted_items;
 
@@ -81,16 +81,15 @@ describe! stainless {
         pause(1000);
 
         // Check we can find the item in a search (fuzzy)
-        let endpoint = "/items?name=pple";
+        let endpoint = "/items?name=appl iphon";
         let mut res = client.get(endpoint).header(ContentType::JSON).dispatch();
         assert_eq!(res.status(), Status::Ok);
         let body = res.body().unwrap().into_string().unwrap();
-        let j: Vec<ItemElastic> = serde_json::from_str(&body).unwrap();
-        println!("{:?}", j);
-        assert_eq!(j[0].model, "iPhone");
-        assert_eq!(j[0].dimension_x, 116);
+        let j: SearchResponse<ItemElastic> = serde_json::from_str(&body).unwrap();
+        assert_eq!(j.results[0].model, "iPhone");
+        assert_eq!(j.results[0].dimension_x, 116);
+        assert_eq!(j.suggestions[0], "appl iphone");
     }
-    
 
     it "fails to get an item that does not exist" {
         let res = client.get("/items/spam").header(ContentType::JSON).dispatch();
